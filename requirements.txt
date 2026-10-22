@@ -1,0 +1,6 @@
+numpy>=2.0,<3
+scipy>=1.14,<2
+pandas>=2.2.3,<3
+scikit-learn>=1.5,<2
+matplotlib>=3.8,<4
+# Optional for the compact CNN: pip install torch (CPU or CUDA wheel as appropriate)
