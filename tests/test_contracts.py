@@ -32,14 +32,14 @@ class ExperimentContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             band_power(np.zeros((4, 15, 3840)))
 
-    def test_unverified_alarm_alignment_blocks_model_fitting(self):
+    def test_undocumented_alarm_timing_blocks_model_fitting(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sample.npz"
             np.savez(path, X=np.zeros((2, 16, 3840)), label=["E", "NE"],
                      subject_id=["1", "2"], case_id=["a", "b"])
             path.with_suffix(".json").write_text(json.dumps({"timing_evidence": {
-                "anchor": "record_duration", "alignment_verified": False}}))
-            with self.assertRaisesRegex(ValueError, "Alarm alignment remains unverified"):
+                "anchor": "record_duration", "timing_status": "unverified"}}))
+            with self.assertRaisesRegex(ValueError, "Document the methods-supported nominal timing assumption"):
                 load(path, False)
 
 
