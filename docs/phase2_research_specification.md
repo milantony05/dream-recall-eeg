@@ -4,7 +4,7 @@ Version: 1.0, 22 October 2026. This specification follows [Phase 1](phase1_feasi
 
 ## 1. Title, scope and problem statement
 
-**Working title:** *Can Pre-Awakening EEG Predict Recalled Experience in N2 Sleep? A Participant-Held-Out DREAM Study with Exploratory White-Dream Analysis.*
+**Final course-project title:** *Participant-Held-Out Prediction of Dream Reports from Pre-Awakening N2 EEG.* The paper title, if warranted, will be revised to reflect actual findings; WR analysis remains exploratory.
 
 At an awakening from N2 (the second non-REM sleep stage), a participant reports whether they recall an experience, have the impression of an experience without recalling content, or report no experience. The primary question is whether an EEG signal recorded **before** the awakening helps predict **recalled experience (E) versus no reported experience (NE)** for a previously unseen participant from the same study. EEG records voltage fluctuations at the scalp. A "white dream" / without-recall report (WR) is an uncertain subjective report category, not evidence that a specific experience objectively occurred.
 
