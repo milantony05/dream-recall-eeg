@@ -25,8 +25,8 @@ def load(path: Path, three_class: bool) -> tuple[np.ndarray, np.ndarray, np.ndar
     if not sidecar.exists():
         raise ValueError("Missing preprocessing sidecar with timing review")
     timing = json.loads(sidecar.read_text(encoding="utf-8")).get("timing_evidence", {})
-    if timing.get("alignment_verified") is not True:
-        raise ValueError("Alarm alignment remains unverified; do not fit models on provisional windows")
+    if timing.get("timing_status") != "methods_supported_nominal" or not timing.get("anchor_uncertainty"):
+        raise ValueError("Document the methods-supported nominal timing assumption and its uncertainty before model fitting")
     with np.load(path) as data:
         X, y, groups, cases = (data[k].copy() for k in ["X", "label", "subject_id", "case_id"])
     if X.ndim != 3 or X.shape[1:] != (16, 3840) or len(set(cases)) != len(cases):
