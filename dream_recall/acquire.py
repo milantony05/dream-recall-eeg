@@ -41,7 +41,9 @@ def fetch_file(info: dict, destination: Path) -> None:
             return
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, ConnectionError, ValueError) as exc:
             temporary.unlink(missing_ok=True)
-            if attempt == 3 or (isinstance(exc, urllib.error.HTTPError) and exc.code not in (429, 500, 502, 503, 504)):
+            # Public Figshare asset redirects can return a transient 403; retry only
+            # this known public endpoint, never a request-only dataset.
+            if attempt == 3 or (isinstance(exc, urllib.error.HTTPError) and exc.code not in (403, 429, 500, 502, 503, 504)):
                 raise
             pause = 2 ** (attempt + 1)
             print(f"Transient download problem ({type(exc).__name__}); retrying in {pause}s", flush=True)

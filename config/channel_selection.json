@@ -1,0 +1,6 @@
+{
+  "version": "Tononi-v3 common scalp montage, before label-dependent modeling",
+  "channel_numbers": [13, 15, 24, 28, 36, 50, 65, 77, 79, 99, 119, 141, 143, 163, 198, 224],
+  "method": "Intersection of numbered EEG channels available in every non-excluded EDF; keep SFP z >= 5, exclude the participant-1 flat channel 81, choose 16 positions by deterministic farthest-point sampling beginning at the highest z coordinate. No dream-report labels were used.",
+  "qc": "Selected channels were checked in the first 30 seconds of all 282 compatible EDFs. The fixed peak/flat rule flags 38 windows; timing and later-window validity remain separate questions."
+}

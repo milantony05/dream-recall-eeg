@@ -11,14 +11,14 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, resample_poly, sosfiltfilt
 
-from .edf import header, interval
+from .edf import header, indices_for_numbers, interval
 
 RATE = 128
 WINDOW = (-35, -5)
 
 
 def channels_from_sfp(raw: Path, n: int = 16) -> list[int]:
-    """Spread scalp sensors using geometry alone (z >= 5); zero-based EDF positions."""
+    """Read the frozen, label-blind common scalp montage; return zero-based numbers."""
     archive = raw / "tononi-v3" / "Tononi Serial Awakenings-Part1-No_PSGs.zip"
     with zipfile.ZipFile(archive) as z:
         name = next(x for x in z.namelist() if x.endswith("HydroCelGSN256v10.sfp"))
@@ -27,18 +27,14 @@ def channels_from_sfp(raw: Path, n: int = 16) -> list[int]:
     for line in lines:
         fields = line.split()
         if fields[0].isdigit() and 1 <= int(fields[0]) <= 256:
-            positions[int(fields[0]) - 1] = np.array([float(x) for x in fields[1:4]])
+            positions[int(fields[0])] = np.array([float(x) for x in fields[1:4]])
     if len(positions) != 256:
         raise ValueError("Expected 256 numbered SFP positions")
-    # Channel 81 is a constant placeholder in the sampled v3 EDFs (physical range -1..1).
-    # Confirm this fixed exclusion across every downloaded EDF in the complete audit.
-    eligible = sorted(k for k, xyz in positions.items() if xyz[2] >= 5.0 and k != 80)
-    selected = [max(eligible, key=lambda k: (positions[k][2], -k))]
-    while len(selected) < n:
-        pick = max((k for k in eligible if k not in selected),
-                   key=lambda k: (min(np.linalg.norm(positions[k] - positions[s]) for s in selected), -k))
-        selected.append(pick)
-    return sorted(selected)
+    config = json.loads((Path(__file__).resolve().parents[1] / "config/channel_selection.json").read_text(encoding="utf-8"))
+    numbers = config["channel_numbers"]
+    if len(numbers) != n or len(set(numbers)) != n or any(k not in positions or positions[k][2] < 5 for k in numbers):
+        raise ValueError("Frozen channel selection incompatible with SFP geometry")
+    return [number - 1 for number in numbers]
 
 
 def convert(uv: np.ndarray, original_rate: int) -> np.ndarray:
@@ -64,8 +60,11 @@ def main() -> None:
     if decision.get("anchor") != "record_duration" or len(decision.get("evidence", "").strip()) < 30:
         raise ValueError("Pre-alarm record-duration anchor needs documented evidence, not an empty confirmation")
     df = pd.read_csv(args.manifest, dtype={"subject_id": str, "case_id": str})
-    if len(df) != 287 or df.status.ne("header_ok").any() or df.duplicated(["study", "case_id"]).any():
-        raise ValueError("Complete, unique, header-verified 287-row manifest required")
+    if (len(df) != 287 or not df.status.isin(["header_ok", "header_variant_ok", "excluded_header_mismatch"]).all()
+            or df.duplicated(["study", "case_id"]).any()):
+        raise ValueError("Complete 287-row manifest with only verified/declared-excluded records required")
+    preexcluded = df[df.status == "excluded_header_mismatch"]
+    df = df[df.status.isin(["header_ok", "header_variant_ok"])]
     selected = channels_from_sfp(args.raw.resolve())
     signals, kept, rejected = [], [], []
     for row in df.itertuples():
@@ -74,7 +73,8 @@ def main() -> None:
             anchor = float(row.nominal_seconds)
             if h.duration < anchor or anchor + WINDOW[0] < 0 or anchor + WINDOW[1] > h.duration:
                 raise ValueError(f"Unsafe interval for {row.filename}")
-            uv = interval(stream, h, selected, anchor + WINDOW[0], anchor + WINDOW[1])
+            indices = indices_for_numbers(h, [i + 1 for i in selected])
+            uv = interval(stream, h, indices, anchor + WINDOW[0], anchor + WINDOW[1])
         # Fixed, label-blind corruption rules. Report per-class rejection counts after processing.
         peak = np.max(np.abs(uv), axis=1)
         span = np.ptp(uv, axis=1)
@@ -98,7 +98,9 @@ def main() -> None:
     sidecar = {"source": "Tononi-v3", "window_relative_to_nominal_end_seconds": list(WINDOW),
                "timing_evidence": decision, "channel_numbers": [i + 1 for i in selected],
                "rate_hz": RATE, "accepted": len(kept), "accepted_by_class": dict(Counter(r[2] for r in kept)),
-               "excluded": [{"case_id": a, "label": b, "reason": c} for a, b, c in rejected]}
+               "excluded": [{"case_id": row.case_id, "label": row.label,
+                             "reason": str(row.exclusion_reason)} for row in preexcluded.itertuples()]
+                           + [{"case_id": a, "label": b, "reason": c} for a, b, c in rejected]}
     args.out.with_suffix(".json").write_text(json.dumps(sidecar, indent=2), encoding="utf-8")
     print(json.dumps({k: v for k, v in sidecar.items() if k != "excluded"}, indent=2))
 

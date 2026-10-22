@@ -8,7 +8,7 @@ This is a small, reproducible undergraduate research project. It emphasizes part
 
 The primary source is the open [DREAM catalogue v9](https://doi.org/10.26180/22133105) and [Tononi Serial Awakenings v3](https://doi.org/10.26180/23306054.v3), **set 13, amendment 2**. The catalogue and the package's own `Records.csv` each describe **287 N2 awakenings from 39 participants**: 124 E, 56 WR and 107 NE. These are pre-quality-check counts. The primary binary task has 231 E/NE candidates. No model performance is reported yet.
 
-Only a six-record participant archive has been inspected at signal level so far. Its EDF files vary between 257 numbered signals and 257 plus an extra `Status` signal; channel 81 is flat in the inspected intervals. The catalogue's EEG count should not be interpreted as the total number of EDF signals. The precise alarm alignment is still unresolved because `Records.csv` gives 120 seconds while sampled EDF headers give 120–121 seconds without an alarm marker. **The preprocessing command intentionally blocks until the [timing and integrity gate](docs/timing_and_integrity_gate.md) is resolved.** Full-archive integrity and signal quality remain to be checked. This is a methodological stop condition, not a software installation problem.
+The complete downloaded archive passes size/MD5 verification. Its 287 EDFs comprise 256 classic headers, 26 EDF+ variants with fewer numbered channels, and five incompatible participant-23 EDFs that span 300 seconds with a different layout. The five are [predeclared exclusions](config/edf_exclusions.csv): three E and two NE. A frozen 16-channel montage is matched by **channel name** across the 282 compatible EDFs. Label-blind peak/flat checks reject 38 additional nominal pre-awakening windows. The provisional processed inventory is **244 awakenings from 35 participants: 106 E, 50 WR, 88 NE**; the primary E/NE inventory is 194. These are eligibility counts, **not model results**. The [timing and integrity review](docs/timing_and_integrity_gate.md) documents why exact alarm alignment is still unverified. Model fitting is blocked by a machine-checked sidecar gate until stronger timing evidence is recorded.
 
 LODE (set 3) is a possible later **external** check, but its seven-channel, 250 Hz EEG and reporting protocol must be independently audited before any cross-study evaluation. Its 11 N2 WR candidates cannot justify a strong cross-lab three-class claim.
 
@@ -40,7 +40,7 @@ python -m dream_recall.manifest --raw data/raw --out outputs/manifest.csv --comp
 python -m dream_recall.qc --raw data/raw --manifest outputs/manifest.csv --out outputs/channel_qc.json
 ```
 
-Read the [timing review](docs/timing_and_integrity_gate.md), verify the source of the alarm anchor, and save a local `data/timing-evidence.json` as specified there. Only then:
+Read the [timing review](docs/timing_and_integrity_gate.md). You may produce a provisional processed inventory for engineering checks with a local `data/timing-evidence.json` explicitly marking `alignment_verified: false`. **Do not run training yet.** Once independently verified, record the exact source and alignment decision in that file, rerun preprocessing, and then run the baseline before the CNN:
 
 ```powershell
 python -m dream_recall.preprocess --raw data/raw --manifest outputs/manifest.csv --timing-evidence data/timing-evidence.json --out data/processed/tononi-v3.npz
@@ -49,12 +49,12 @@ python -m dream_recall.train --input data/processed/tononi-v3.npz --out outputs/
 python -m dream_recall.cnn --input data/processed/tononi-v3.npz --out outputs/binary_cnn
 ```
 
-The CNN command needs optional PyTorch. The binary baseline runs first. Raw EEG, report spreadsheets, processed arrays and results stay in ignored `data/` and `outputs/`; they are never committed by these scripts. The source datasets have their own terms and attribution requirements. Verify the license of each package before reuse or redistribution; cite DREAM and Tononi in research outputs.
+The training commands refuse a processed dataset whose sidecar lacks `alignment_verified: true`. Set this only after genuine independent evidence establishes the anchor for this release; it is not a flag to bypass the review. The CNN needs optional PyTorch. Raw EEG, report spreadsheets, processed arrays and results stay in ignored `data/` and `outputs/`; they are never committed by these scripts. The source datasets have their own terms and attribution requirements. Verify the license of each package before reuse or redistribution; cite DREAM and Tononi in research outputs.
 
 ## What the pipeline does
 
-1. **Manifest:** joins catalogue and Tononi package rows by filename/case ID, verifies subject, class and N2 stage, then checks each EDF header. It explicitly accepts a documented optional `Status` channel but never treats it as EEG. A missing or inconsistent file blocks the complete audit.
-2. **Preprocessing:** after timing verification, selects 16 spatially spread numbered scalp channels from the published SFP coordinates without using labels, excluding the observed constant channel 81. Extracts one nominal 30-second window per awakening, applies a 0.5–35 Hz band-pass, resamples to 128 Hz and applies fixed gross-artifact checks. The recorded reference is not silently changed. Rejections and the channel list are logged.
+1. **Manifest:** joins catalogue and Tononi package rows by filename/case ID, verifies subject, class and N2 stage, then checks each EDF header. It recognizes the documented `Status` and EDF+ annotation variants, matches EEG by actual label, and requires explicit declarations for incompatible files. A missing or inconsistent file blocks the complete audit.
+2. **Preprocessing:** selects 16 spatially spread numbered scalp channels from the published SFP coordinates without using report labels, excluding the observed constant channel 81. Extracts one **nominal** 30-second window per awakening, applies a 0.5–35 Hz band-pass, resamples to 128 Hz and applies fixed gross-artifact checks. The recorded reference is not silently changed. Rejections and the channel list are logged. Model fitting requires independently verified timing.
 3. **Baseline:** computes five relative log band-power bands per channel and fits scaled, class-weighted logistic regression. A training-fold class-prior prediction is the stage-only comparator (N2 is constant). All tuning is inside participant-grouped training folds. A binary sigmoid calibration and an abstention threshold are fitted using training-side cross-fitted predictions; neither uses the outer test labels.
 4. **CNN:** a compact fixed 1D convolutional model uses the same participant-disjoint outer folds. Input scaling and early stopping use training/validation participants only. It is an optional comparator, not a claimed improvement.
 5. **Evaluation:** saves awakening-level out-of-fold probabilities, fold memberships, configuration, macro F1, balanced accuracy, class-specific precision/recall, binary AUROC/AUPRC, Brier/calibration, confusion and precision–recall plots. Confidence intervals resample whole participants, with paired differences against the prior comparator. The exploratory three-class fit is separate from the binary task.
@@ -67,7 +67,8 @@ The CNN command needs optional PyTorch. The binary baseline runs first. Raw EEG,
 |---|---|
 | `docs/phase1_feasibility_audit.md` | Primary data/literature audit and go/no-go decision |
 | `docs/phase2_research_specification.md` | Questions, labels, splits, baselines and stop rules |
-| `docs/timing_and_integrity_gate.md` | Unresolved alarm alignment and full-file review |
+| `docs/timing_and_integrity_gate.md` | Complete-file audit and unresolved alarm alignment |
+| `config/` | Frozen channel selection and explicit header exclusions |
 | `dream_recall/acquire.py` | Pinned public catalogue/package download and hashes |
 | `dream_recall/manifest.py` | Catalogue/package/EDF join and completeness check |
 | `dream_recall/edf.py`, `qc.py`, `preprocess.py` | EDF reading, label-blind channel checks and controlled signal processing |

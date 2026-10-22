@@ -21,6 +21,12 @@ SEED = 42
 
 
 def load(path: Path, three_class: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    sidecar = path.with_suffix(".json")
+    if not sidecar.exists():
+        raise ValueError("Missing preprocessing sidecar with timing review")
+    timing = json.loads(sidecar.read_text(encoding="utf-8")).get("timing_evidence", {})
+    if timing.get("alignment_verified") is not True:
+        raise ValueError("Alarm alignment remains unverified; do not fit models on provisional windows")
     with np.load(path) as data:
         X, y, groups, cases = (data[k].copy() for k in ["X", "label", "subject_id", "case_id"])
     if X.ndim != 3 or X.shape[1:] != (16, 3840) or len(set(cases)) != len(cases):

@@ -1,11 +1,14 @@
 """Contracts that would catch common EEG experiment failures without raw data."""
 
 import unittest
+import json
+import tempfile
+from pathlib import Path
 
 import numpy as np
 
 from dream_recall.features import band_power
-from dream_recall.train import splits
+from dream_recall.train import load, splits
 
 
 class ExperimentContracts(unittest.TestCase):
@@ -28,6 +31,16 @@ class ExperimentContracts(unittest.TestCase):
     def test_bad_shape_is_rejected(self):
         with self.assertRaises(ValueError):
             band_power(np.zeros((4, 15, 3840)))
+
+    def test_unverified_alarm_alignment_blocks_model_fitting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.npz"
+            np.savez(path, X=np.zeros((2, 16, 3840)), label=["E", "NE"],
+                     subject_id=["1", "2"], case_id=["a", "b"])
+            path.with_suffix(".json").write_text(json.dumps({"timing_evidence": {
+                "anchor": "record_duration", "alignment_verified": False}}))
+            with self.assertRaisesRegex(ValueError, "Alarm alignment remains unverified"):
+                load(path, False)
 
 
 if __name__ == "__main__":

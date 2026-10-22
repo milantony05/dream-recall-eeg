@@ -1,0 +1,6 @@
+filename,expected_status,reason
+s23_ep01.edf,header_mismatch,300-second EDF with 256 differently named signals versus 120-second 257-channel package record; alarm anchor and montage incompatible
+s23_ep02.edf,header_mismatch,300-second EDF with 256 differently named signals versus 120-second 257-channel package record; alarm anchor and montage incompatible
+s23_ep03.edf,header_mismatch,300-second EDF with 256 differently named signals versus 120-second 257-channel package record; alarm anchor and montage incompatible
+s23_ep04.edf,header_mismatch,300-second EDF with 256 differently named signals versus 120-second 257-channel package record; alarm anchor and montage incompatible
+s23_ep05.edf,header_mismatch,300-second EDF with 256 differently named signals versus 120-second 257-channel package record; alarm anchor and montage incompatible

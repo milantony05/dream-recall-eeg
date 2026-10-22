@@ -23,7 +23,7 @@ def _csv_from_zip(z: zipfile.ZipFile, suffix: str) -> list[dict]:
     return list(csv.DictReader(io.TextIOWrapper(z.open(names[0]), encoding="utf-8-sig")))
 
 
-def build(raw: Path, *, complete: bool = False) -> pd.DataFrame:
+def build(raw: Path, *, complete: bool = False, exclusions: Path = Path("config/edf_exclusions.csv")) -> pd.DataFrame:
     cat = raw / "catalogue-v9" / "Data records.csv"
     root = raw / "tononi-v3"
     control = root / "Tononi Serial Awakenings-Part1-No_PSGs.zip"
@@ -76,23 +76,51 @@ def build(raw: Path, *, complete: bool = False) -> pd.DataFrame:
             rate = h.samples_per_record[0] / h.record_seconds
             row.update(archive=str(archive.resolve()), member=member, edf_seconds=h.duration,
                        edf_rate=rate, edf_channels=len(h.labels), status="header_ok")
-            # Some EDFs append a non-EEG Status signal. The catalogue counts EEG, not total EDF signals.
-            if (rate != 500 or rate != row["catalogue_rate"] or row["catalogue_channels"] != 257
-                    or len(h.labels) not in (257, 258) or (len(h.labels) == 258 and h.labels[-1] != "Status")):
+            classic = (len(h.labels) in (257, 258)
+                       and all(h.labels[i] == f"Chan {i + 1}" and h.units[i] == "uV" for i in range(257))
+                       and (len(h.labels) == 257 or h.labels[-1] == "Status"))
+            numeric = [x for x in h.labels[:-1] if x.isdigit()]
+            variant = (h.labels[-1] == "EDF Annotations" and len(numeric) >= 200
+                       and len(numeric) == len(set(numeric))
+                       and len(numeric) + h.labels[:-1].count("Cz") == len(h.labels) - 1
+                       and all(h.units[i] == "uV" and h.samples_per_record[i] == 500 for i in range(len(h.labels) - 1))
+                       and h.duration == row["nominal_seconds"])
+            if rate != 500 or rate != row["catalogue_rate"] or row["catalogue_channels"] != 257:
                 row["status"] = "header_mismatch"
-            elif not all(h.labels[i] == f"Chan {i + 1}" and h.units[i] == "uV" for i in range(257)):
-                row["status"] = "montage_mismatch"
+            elif not (classic or variant):
+                row["status"] = "header_mismatch"
             elif h.duration < row["nominal_seconds"] or h.duration - row["nominal_seconds"] > 2:
                 row["status"] = "duration_mismatch"
             elif not (h.patient.startswith(r["Subject ID"] + " ") and r["Case ID"] in h.patient):
                 row["status"] = "patient_mismatch"
+            else:
+                row["status"] = "header_ok" if classic else "header_variant_ok"
         rows.append(row)
     result = pd.DataFrame(rows).sort_values(["subject_id", "case_id"])
+    result["exclusion_reason"] = ""
     if len(result) != 287 or result.duplicated(["study", "case_id"]).any():
         raise ValueError("Manifest key mismatch")
     if complete and set(files) != {r["Filename"] for r in package}:
         raise ValueError("EDF inventory differs from package Records.csv")
-    if complete and (result["status"] != "header_ok").any():
+    if exclusions.exists():
+        with exclusions.open(encoding="utf-8", newline="") as stream:
+            declared = list(csv.DictReader(stream))
+        if len({row["filename"] for row in declared}) != len(declared):
+            raise ValueError("Duplicate declared exclusion")
+        for declaration in declared:
+            mask = result.filename == declaration["filename"]
+            if mask.sum() != 1:
+                raise ValueError(f"Exclusion not uniquely found: {declaration['filename']}")
+            current_status = result.loc[mask, "status"].iloc[0]
+            if current_status != declaration["expected_status"]:
+                if complete or current_status != "missing_edf":
+                    raise ValueError(f"Exclusion status changed: {declaration['filename']}: {current_status}")
+                continue
+            if len(declaration["reason"].strip()) < 15:
+                raise ValueError("Exclusion needs a substantive reason")
+            result.loc[mask, "status"] = "excluded_" + current_status
+            result.loc[mask, "exclusion_reason"] = declaration["reason"]
+    if complete and not result.status.isin(["header_ok", "header_variant_ok", "excluded_header_mismatch"]).all():
         raise ValueError(f"Incomplete/invalid raw archive inventory: {Counter(result['status'])}")
     return result
 
@@ -101,9 +129,10 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--raw", type=Path, default=Path("data/raw"))
     p.add_argument("--out", type=Path, default=Path("outputs/manifest.csv"))
-    p.add_argument("--complete", action="store_true", help="Fail unless all 287 EDF headers match")
+    p.add_argument("--complete", action="store_true", help="Fail unless all EDF files are present and any mismatch is explicitly excluded")
+    p.add_argument("--exclusions", type=Path, default=Path("config/edf_exclusions.csv"))
     args = p.parse_args()
-    result = build(args.raw.resolve(), complete=args.complete)
+    result = build(args.raw.resolve(), complete=args.complete, exclusions=args.exclusions)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(args.out, index=False)
     summary = {"source": "Tononi amendment 2 / article version 3", "rows": len(result),

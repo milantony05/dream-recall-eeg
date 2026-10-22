@@ -1,7 +1,8 @@
 """Small EDF reader for the fixed-rate, numbered Tononi channels.
 
-Reads only a selected interval and selected channels. EDF+ and variable-rate signals
-are deliberately rejected rather than silently decoded incorrectly.
+Reads only a selected interval and selected fixed-rate EEG channels. EDF+
+annotation signals are not decoded or used as EEG; selected variable-rate
+signals are rejected.
 """
 
 from dataclasses import dataclass
@@ -94,3 +95,14 @@ def interval(stream: BinaryIO, h: Header, indices: list[int], start: float, end:
     if result.shape != (len(indices), n_samples) or not np.isfinite(result).all():
         raise ValueError("Unexpected EDF shape or nonfinite signal")
     return result
+
+
+def indices_for_numbers(h: Header, numbers: list[int]) -> list[int]:
+    """Match actual EDF labels, never presume the channel number equals its file position."""
+    out = []
+    for number in numbers:
+        choices = [i for i, label in enumerate(h.labels) if label in (f"Chan {number}", str(number))]
+        if len(choices) != 1 or h.units[choices[0]] != "uV":
+            raise ValueError(f"Missing/duplicate/non-uV EEG channel {number}")
+        out.append(choices[0])
+    return out

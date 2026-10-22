@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .edf import header, interval
+from .edf import header, indices_for_numbers, interval
 from .preprocess import channels_from_sfp
 
 
@@ -20,8 +20,9 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=Path("outputs/channel_qc.json"))
     args = p.parse_args()
     rows = pd.read_csv(args.manifest, dtype={"subject_id": str})
-    if len(rows) != 287 or rows.status.ne("header_ok").any():
-        raise ValueError("Complete 287-row header audit required before channel QC")
+    if len(rows) != 287 or not rows.status.isin(["header_ok", "header_variant_ok", "excluded_header_mismatch"]).all():
+        raise ValueError("Complete 287-row header audit with declared exclusions required before channel QC")
+    rows = rows[rows.status.isin(["header_ok", "header_variant_ok"])]
     selected = channels_from_sfp(args.raw.resolve())
     flat, peak = Counter(), Counter()
     rejected = []
@@ -29,9 +30,10 @@ def main() -> None:
     for row in rows.itertuples():
         with zipfile.ZipFile(row.archive) as archive, archive.open(row.member) as stream:
             h = header(stream)
-            extras["status_present" if h.labels[-1] == "Status" else "no_status"] += 1
+            extras[("status_present" if h.labels[-1] == "Status" else
+                    "edf_annotations" if h.labels[-1] == "EDF Annotations" else "no_extra_signal")] += 1
             # An early 30-second sample checks channel integrity without an alarm anchor.
-            x = interval(stream, h, selected, 0, 30)
+            x = interval(stream, h, indices_for_numbers(h, [i + 1 for i in selected]), 0, 30)
         bad_flat = [selected[i] + 1 for i in np.flatnonzero(np.ptp(x, axis=1) < 0.25)]
         bad_peak = [selected[i] + 1 for i in np.flatnonzero(np.max(np.abs(x), axis=1) > 500)]
         flat.update(bad_flat); peak.update(bad_peak)
