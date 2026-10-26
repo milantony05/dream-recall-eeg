@@ -20,7 +20,7 @@ from .features import band_power
 SEED = 42
 
 
-def load(path: Path, three_class: bool) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def load(path: Path, three_class: bool, case_list: Path | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     sidecar = path.with_suffix(".json")
     if not sidecar.exists():
         raise ValueError("Missing preprocessing sidecar with timing review")
@@ -34,6 +34,11 @@ def load(path: Path, three_class: bool) -> tuple[np.ndarray, np.ndarray, np.ndar
     if not set(y) <= {"E", "WR", "NE"}:
         raise ValueError("Invalid report labels")
     keep = np.ones(len(y), bool) if three_class else y != "WR"
+    if case_list is not None:
+        wanted = json.loads(case_list.read_text(encoding="utf-8"))["case_ids"]
+        if len(wanted) != len(set(wanted)) or not set(wanted) <= set(cases):
+            raise ValueError("Case list contains duplicates or cases absent from this window")
+        keep &= np.isin(cases, wanted)
     return X[keep], y[keep], groups[keep], cases[keep]
 
 
@@ -47,8 +52,8 @@ def splits(y: np.ndarray, groups: np.ndarray, wanted: int) -> list[tuple[np.ndar
     raise ValueError("No 3+ participant-disjoint folds with every class on both sides")
 
 
-def run(input_path: Path, output: Path, three_class: bool = False) -> None:
-    X, y, groups, cases = load(input_path, three_class)
+def run(input_path: Path, output: Path, three_class: bool = False, case_list: Path | None = None) -> None:
+    X, y, groups, cases = load(input_path, three_class, case_list)
     labels = ["NE", "WR", "E"] if three_class else ["NE", "E"]
     if len(set(y)) != len(labels) or len(set(groups)) < 9:
         raise ValueError("Insufficient labeled participants/classes")
@@ -99,7 +104,8 @@ def run(input_path: Path, output: Path, three_class: bool = False) -> None:
     if not three_class:
         saved.update(calibrated_probability=calibrated, accepted=accepted)
     np.savez_compressed(output / "out_of_fold.npz", **saved)
-    result = {"source": str(input_path), "model": "band-power logistic regression", "seed": SEED,
+    result = {"source": str(input_path), "case_list": str(case_list) if case_list else None,
+              "model": "band-power logistic regression", "seed": SEED,
               "software": {"python": platform.python_version(), "numpy": np.__version__, "scipy": scipy.__version__,
                            "sklearn": sklearn.__version__}, "folds": fold_info,
               "eeg": scores(y, predicted, labels), "prior": scores(y, prior, labels),
@@ -108,6 +114,8 @@ def run(input_path: Path, output: Path, three_class: bool = False) -> None:
         result["calibrated"] = scores(y, calibrated, labels)
         result["selective"] = {"retained": int(accepted.sum()), "coverage": float(accepted.mean()),
                                "metrics_on_retained": scores(y[accepted], calibrated[accepted], labels)
+                               if len(set(y[accepted])) == 2 else None,
+                               "prior_on_retained": scores(y[accepted], prior[accepted], labels)
                                if len(set(y[accepted])) == 2 else None}
     write_results(output / "metrics.json", result)
     figures(y, calibrated if not three_class else predicted, labels, output)
@@ -120,8 +128,9 @@ def main() -> None:
     p.add_argument("--input", type=Path, default=Path("data/processed/tononi-v3.npz"))
     p.add_argument("--out", type=Path, default=Path("outputs/binary_baseline"))
     p.add_argument("--three-class", action="store_true", help="Separate exploratory E/WR/NE fit")
+    p.add_argument("--case-list", type=Path, help="Optional prespecified common-case JSON for paired timing sensitivity")
     args = p.parse_args()
-    run(args.input, args.out, args.three_class)
+    run(args.input, args.out, args.three_class, args.case_list)
 
 
 if __name__ == "__main__":

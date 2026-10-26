@@ -53,9 +53,12 @@ def main() -> None:
     p.add_argument("--raw", type=Path, default=Path("data/raw"))
     p.add_argument("--manifest", type=Path, default=Path("outputs/manifest.csv"))
     p.add_argument("--out", type=Path, default=Path("data/processed/tononi-v3.npz"))
+    p.add_argument("--window-shift-seconds", type=int, choices=(-1, 0, 1), default=0,
+                   help="Prespecified one-second timing sensitivity; 0 is the primary 85–115 s window")
     p.add_argument("--timing-evidence", type=Path, required=True,
                    help="Human-reviewed JSON: anchor='record_duration', evidence=<nonempty explanation>; see README")
     args = p.parse_args()
+    window = tuple(bound + args.window_shift_seconds for bound in WINDOW)
     decision = json.loads(args.timing_evidence.read_text(encoding="utf-8"))
     if decision.get("anchor") != "record_duration" or len(decision.get("evidence", "").strip()) < 30:
         raise ValueError("Pre-alarm record-duration anchor needs documented evidence, not an empty confirmation")
@@ -71,10 +74,10 @@ def main() -> None:
         with zipfile.ZipFile(row.archive) as z, z.open(row.member) as stream:
             h = header(stream)
             anchor = float(row.nominal_seconds)
-            if h.duration < anchor or anchor + WINDOW[0] < 0 or anchor + WINDOW[1] > h.duration:
+            if h.duration < anchor or anchor + window[0] < 0 or anchor + window[1] > h.duration:
                 raise ValueError(f"Unsafe interval for {row.filename}")
             indices = indices_for_numbers(h, [i + 1 for i in selected])
-            uv = interval(stream, h, indices, anchor + WINDOW[0], anchor + WINDOW[1])
+            uv = interval(stream, h, indices, anchor + window[0], anchor + window[1])
         # Fixed, label-blind corruption rules. Report per-class rejection counts after processing.
         peak = np.max(np.abs(uv), axis=1)
         span = np.ptp(uv, axis=1)
@@ -95,7 +98,8 @@ def main() -> None:
         if check["X"].shape != (len(kept), len(selected), 3840):
             raise ValueError("Saved dataset failed verification")
     temporary.replace(args.out)
-    sidecar = {"source": "Tononi-v3", "window_relative_to_nominal_end_seconds": list(WINDOW),
+    sidecar = {"source": "Tononi-v3", "window_relative_to_nominal_end_seconds": list(window),
+               "window_shift_seconds": args.window_shift_seconds,
                "timing_evidence": decision, "channel_numbers": [i + 1 for i in selected],
                "rate_hz": RATE, "accepted": len(kept), "accepted_by_class": dict(Counter(r[2] for r in kept)),
                "excluded": [{"case_id": row.case_id, "label": row.label,

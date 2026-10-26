@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from dream_recall.features import band_power
+from dream_recall.sensitivity import lock
 from dream_recall.train import load, splits
 
 
@@ -41,6 +42,17 @@ class ExperimentContracts(unittest.TestCase):
                 "anchor": "record_duration", "timing_status": "unverified"}}))
             with self.assertRaisesRegex(ValueError, "Document the methods-supported nominal timing assumption"):
                 load(path, False)
+
+    def test_timing_comparison_rejects_identity_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = []
+            for shift in (-1, 0, 1):
+                path = Path(directory) / f"shift_{shift}.npz"
+                np.savez(path, case_id=["case1"], subject_id=["other" if shift == 1 else "p1"], label=["E"])
+                path.with_suffix(".json").write_text(json.dumps({"window_shift_seconds": shift}))
+                paths.append(path)
+            with self.assertRaisesRegex(ValueError, "subject/label disagreement"):
+                lock(paths, Path(directory) / "common.json")
 
 
 if __name__ == "__main__":

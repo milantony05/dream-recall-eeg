@@ -105,7 +105,8 @@ def run(input_path: Path, output: Path, three_class: bool = False) -> None:
     np.savez_compressed(output / "out_of_fold.npz", case_id=cases, subject_id=groups, label=y,
                         probability=probabilities, prior_probability=prior, class_order=np.array(labels))
     result = {"model": "compact 1D CNN", "source": str(input_path), "seed": SEED,
-              "torch": torch.__version__, "device": str(device), "python": platform.python_version(),
+              "torch": torch.__version__, "device": str(device), "torch_threads": torch.get_num_threads(),
+              "python": platform.python_version(),
               "folds": fold_log, "eeg": scores(y, probabilities, labels), "prior": scores(y, prior, labels),
               "participant_bootstrap": participant_ci(y, probabilities, groups, labels, other=prior, seed=SEED)}
     write_results(output / "metrics.json", result)
