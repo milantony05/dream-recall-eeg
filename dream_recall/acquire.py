@@ -12,6 +12,8 @@ CATALOGUE_ID = 22133105
 CATALOGUE_VERSION = 9
 TONONI_ID = 23306054
 TONONI_VERSION = 3
+LODE_ID = 22147085
+LODE_VERSION = 1
 
 
 def article(article_id: int, version: int) -> dict:
@@ -63,16 +65,20 @@ def main() -> None:
     parser.add_argument("--root", type=Path, default=Path("data/raw"))
     parser.add_argument("--tononi-subject", type=int, action="append", default=[], help="1–39; repeat to fetch several")
     parser.add_argument("--all-tononi", action="store_true", help="Fetch all ~7.83 GB, including subject archives")
+    parser.add_argument("--lode", action="store_true", help="Fetch open LODE v1 package (~134 MB)")
     args = parser.parse_args()
     root = args.root.resolve()
-    for aid, version in [(CATALOGUE_ID, CATALOGUE_VERSION), (TONONI_ID, TONONI_VERSION)]:
+    articles = [(CATALOGUE_ID, CATALOGUE_VERSION), (TONONI_ID, TONONI_VERSION)]
+    if args.lode:
+        articles.append((LODE_ID, LODE_VERSION))
+    for aid, version in articles:
         metadata = article(aid, version)
-        folder = root / ("catalogue-v9" if aid == CATALOGUE_ID else "tononi-v3")
+        folder = root / ("catalogue-v9" if aid == CATALOGUE_ID else "lode-v1" if aid == LODE_ID else "tononi-v3")
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "source-article.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         for item in metadata["files"]:
             name = item["name"]
-            if aid == CATALOGUE_ID or "No_PSGs" in name or args.all_tononi or any(f"-s{n:02d}_PSGs" in name for n in args.tononi_subject):
+            if aid in (CATALOGUE_ID, LODE_ID) or "No_PSGs" in name or args.all_tononi or any(f"-s{n:02d}_PSGs" in name for n in args.tononi_subject):
                 print(f"Fetching/checking {name}", flush=True)
                 fetch_file(item, folder / name)
     print(f"Pinned public files saved under {root}; raw files remain outside git.")

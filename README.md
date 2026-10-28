@@ -1,8 +1,8 @@
 # Dream recall from pre-awakening EEG
 
-**Research status: Phase 4 within-study experiments complete; external generalization untested.** This project studies whether EEG recorded before an N2 awakening predicts a person's subsequent report of **recalled experience (E)** versus **no reported experience (NE)**. A third category, **experience without recalled content (WR, sometimes called a white dream)**, is exploratory. The target is a report after awakening. The system does not identify dream content or establish whether someone was conscious.
+**Research status: Within-study and one-way external tests complete; journal-ready transfer has not been demonstrated.** This project studies whether EEG recorded before an N2 awakening predicts a person's subsequent report of **recalled experience (E)** versus **no reported experience (NE)**. A third category, **experience without recalled content (WR, sometimes called a white dream)**, is exploratory. The target is a report after awakening. The system does not identify dream content or establish whether someone was conscious.
 
-This is a small, reproducible undergraduate research project. It emphasizes participant-held-out testing, class balance, calibration and failure analysis. See the [data/literature audit](docs/phase1_feasibility_audit.md), [research specification](docs/phase2_research_specification.md), and [measured Phase 4 results](docs/phase4_results.md). Existing DREAM studies have already classified binary reports; this repository does not claim a first dream classifier.
+This is a small, reproducible undergraduate research project. It emphasizes participant-held-out testing, class balance, calibration and failure analysis. See the [data/literature audit](docs/phase1_feasibility_audit.md), [research specification](docs/phase2_research_specification.md), and [measured Phase 4 results](docs/phase4_results.md), and [LODE external-transfer audit](docs/external_transfer_audit.md). Existing DREAM studies have already classified binary reports; this repository does not claim a first dream classifier.
 
 ## Data and current gate
 
@@ -12,7 +12,7 @@ The complete downloaded archive passes size/MD5 verification. Its 287 EDFs compr
 
 **Measured primary result:** The band-power logistic model reached macro F1 **0.593**, balanced accuracy **0.596**, and AUROC **0.624** on 194 participant-held-out E/NE awakenings. Its raw probability Brier score (**0.265**) was worse than the prior-only baseline (**0.248**). A compact CNN reached macro F1 **0.474** and AUROC **0.505**. WR detection in three-class models was weak. These are within-study findings, not a cross-laboratory or clinical validation.
 
-LODE (set 3) is a possible later **external** check, but its seven-channel, 250 Hz EEG and reporting protocol must be independently audited before any cross-study evaluation. Its 11 N2 WR candidates cannot justify a strong cross-lab three-class claim.
+An independent [LODE v1](https://doi.org/10.6084/m9.figshare.22147085.v1) audit found 83 quality-eligible N2 E/NE reports from 24 participants. Its seven-channel dry headband, spontaneous home awakenings and often delayed reports differ sharply from Tononi. A small channel-pooled neural network trained on Tononi reached external AUROC **0.447 [0.264, 0.592]**; a matched spectral logistic baseline reached **0.452 [0.296, 0.573]**. This **does not demonstrate transfer**. The [external audit](docs/external_transfer_audit.md) records 24 signal exclusions and the interpretation limits. WR has only 11 N2 LODE candidates and was not externally modeled.
 
 ## Setup and acquisition
 
@@ -64,6 +64,17 @@ python -m dream_recall.plot_summary --results outputs --out docs/figures/phase4_
 
 The training commands require the sidecar to record `timing_status: methods_supported_nominal` and describe the endpoint uncertainty. This makes the working assumption explicit; it does not verify the exact alarm sample. The CNN needs optional PyTorch; the reported run used PyTorch 2.10.0+cpu with four CPU threads. Raw EEG, report spreadsheets, processed arrays and sample-level predictions stay in ignored `data/` and `outputs/`. Only deidentified aggregate results are versioned. The source datasets have their own terms and attribution requirements. Verify the license of each package before reuse or redistribution; cite DREAM and Tononi in research outputs.
 
+For the separate one-way LODE stress test, after preparing Tononi above and installing optional PyTorch:
+
+```powershell
+python -m dream_recall.acquire --root data/raw --lode
+python -m dream_recall.lode_audit --raw data/raw/lode-v1 --out outputs/lode_audit.json
+python -m dream_recall.transfer_data --source data/processed/tononi-v3.npz --lode data/raw/lode-v1 --out data/processed/transfer.npz
+python -m dream_recall.transfer_model --input data/processed/transfer.npz --out outputs/transfer
+```
+
+The target labels are used only at final evaluation; its montage, reference and awakening protocol differ.
+
 ## What the pipeline does
 
 1. **Manifest:** joins catalogue and Tononi package rows by filename/case ID, verifies subject, class and N2 stage, then checks each EDF header. It recognizes the documented `Status` and EDF+ annotation variants, matches EEG by actual label, and requires explicit declarations for incompatible files. A missing or inconsistent file blocks the complete audit.
@@ -81,6 +92,7 @@ The training commands require the sidecar to record `timing_status: methods_supp
 | `docs/phase1_feasibility_audit.md` | Primary data/literature audit and go/no-go decision |
 | `docs/phase2_research_specification.md` | Questions, labels, splits, baselines and stop rules |
 | `docs/phase4_results.md`, `results/phase4_metrics.json` | Actual results, limitations and deidentified metrics |
+| `docs/external_transfer_audit.md`, `results/transfer_metrics.json` | Independent-data audit, neural-network stress test and negative transfer result |
 | `docs/timing_and_integrity_gate.md` | Complete-file audit and unresolved alarm alignment |
 | `config/` | Frozen channel selection and explicit header exclusions |
 | `dream_recall/acquire.py` | Pinned public catalogue/package download and hashes |

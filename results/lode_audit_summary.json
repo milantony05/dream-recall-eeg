@@ -1,0 +1,38 @@
+{
+  "source": "LODE v1 / DREAM set 3 amendment 0",
+  "all_files": 190,
+  "n2": 118,
+  "n2_participants": 27,
+  "n2_by_class": {
+    "NE": 41,
+    "E": 66,
+    "WR": 11
+  },
+  "binary_n2": 107,
+  "binary_participants": 26,
+  "binary_with_fewer_than_two_good_channels": 0,
+  "header_status": {
+    "header_ok": 189,
+    "case_id_mismatch": 1
+  },
+  "bad_channel_count_binary": {
+    "4": 11,
+    "2": 6,
+    "5": 17,
+    "3": 30,
+    "7": 43
+  },
+  "channel_labels": [
+    "EEG Fp1-O1",
+    "EEG Fp1-O2",
+    "EEG Fp1-F7",
+    "EEG F8-F7",
+    "EEG F7-O1",
+    "EEG F8-O2",
+    "EEG Fp1-F8"
+  ],
+  "rate_hz": 250,
+  "edf_seconds": 140,
+  "stage_note": "Only the last stage is provided; verify stage continuity for the chosen window.",
+  "protocol_note": "Home dry-electrode headband; spontaneous morning awakening; report often recorded minutes later."
+}

@@ -9,6 +9,8 @@ import numpy as np
 
 from dream_recall.features import band_power
 from dream_recall.sensitivity import lock
+from dream_recall.transfer_data import spectrum
+from dream_recall.transfer_model import pooled
 from dream_recall.train import load, splits
 
 
@@ -32,6 +34,16 @@ class ExperimentContracts(unittest.TestCase):
     def test_bad_shape_is_rejected(self):
         with self.assertRaises(ValueError):
             band_power(np.zeros((4, 15, 3840)))
+
+    def test_transfer_spectrum_matches_source_and_ignores_padding(self):
+        t = np.arange(3840) / 128
+        x = np.broadcast_to(np.sin(2 * np.pi * 10 * t), (2, 16, 3840)).astype(np.float32)
+        features = spectrum(x)
+        np.testing.assert_allclose(features, band_power(x).reshape(2, 16, 5), atol=1e-5)
+        mask = np.zeros((2, 16), bool); mask[:, :2] = True
+        before = pooled(features, mask)
+        features[:, 2:] = 99
+        np.testing.assert_allclose(before, pooled(features, mask))
 
     def test_undocumented_alarm_timing_blocks_model_fitting(self):
         with tempfile.TemporaryDirectory() as directory:
